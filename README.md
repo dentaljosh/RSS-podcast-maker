@@ -6,8 +6,22 @@ Transform any RSS feed (like Substack) into a professional, two-host AI podcast.
 - **Two-Host Dialogue**: Generates argumentative, high-energy discussions between two AI hosts.
 - **Intro & Metadata**: Automatically adds intros with episode details and embeds ID3 tags.
 - **Drive Hosting**: Uploads MP3s to Google Drive using direct-download links.
-- **GitHub Gist RSS**: Hosts your RSS feed on GitHub Gists for 100% reliable subscription in apps like Pocket Casts.
+- **GitHub Gist RSS**: Hosts your RSS feed on GitHub Gists for 100% reliable subscription.
 - **Modular Design**: Cleanly separated logic for RSS handling, AI generation, and storage.
+
+## 🏗️ Architecture
+```mermaid
+graph TD
+    A[RSS Feed] -->|rss_handler.py| B(Article Text)
+    B -->|ai_engine.py| C{Claude 3.5}
+    C -->|Script| D(Dialogue Lines)
+    D -->|ai_engine.py| E{OpenAI TTS}
+    E -->|MP3 Clips| F(Stitched Audio)
+    F -->|storage_manager.py| G[Google Drive]
+    G -->|File ID| H(RSS XML Update)
+    H -->|storage_manager.py| I[GitHub Gist]
+    I -->|Raw URL| J(Podcast App)
+```
 
 ## 📁 Directory Structure
 - `main.py`: The central loop that orchestrates the entire process.
