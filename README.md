@@ -40,7 +40,7 @@ graph TD
 git clone https://github.com/yourusername/RSS-podcast-maker.git
 cd RSS-podcast-maker
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\\Scripts\\activate
 pip install -r requirements.txt
 ```
 
@@ -70,14 +70,14 @@ Simply run:
 python main.py
 ```
 
-## � Testing
+## 🧪 Testing
 The project includes a lean testing suite using `pytest`. To run tests:
 ```bash
 pytest
 ```
 This verifies filename sanitization, script parsing, and RSS generation logic without needing API keys.
 
-## �🤝 Contributing
+## 🤝 Contributing
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ## ⚖️ License
