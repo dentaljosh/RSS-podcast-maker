@@ -1,19 +1,20 @@
 # RSS Podcast Maker 🎙️🤖
 
-Transform any RSS feed (like Substack) into a professional, two-host AI podcast. This tool uses Anthropic's Claude to write scripts and OpenAI's TTS to generate high-quality audio, then hosts the feed for you.
+Transform any RSS feed (like Substack) into a professional, two-host AI podcast. This tool uses Anthropic's Claude to write scripts and OpenAI's TTS to generate high-quality audio, then hosts the feed for you. Now upgraded for production usage with Multi-Show support, SQLite storage, and Dockerization.
 
 ## ✨ Features
+- **Multi-Show Multi-Tenancy**: Run multiple independent podcast shows in a single execution.
 - **Two-Host Dialogue**: Generates argumentative, high-energy discussions between two AI hosts.
-- **Intro & Metadata**: Automatically adds intros with episode details and embeds ID3 tags.
+- **SQLite Storage**: Robust tracking of processed articles with item metadata and show isolation.
 - **Drive Hosting**: Uploads MP3s to Google Drive using direct-download links.
 - **GitHub Gist RSS**: Hosts your RSS feed on GitHub Gists for 100% reliable subscription.
-- **Modular Design**: Cleanly separated logic for RSS handling, AI generation, and storage.
+- **Dockerized**: reproducible environment with FFmpeg built-in.
 
 ## 🏗️ Architecture
 ```mermaid
 graph TD
     A[RSS Feed] -->|rss_handler.py| B(Article Text)
-    B -->|ai_engine.py| C{Claude 3.5}
+    B -->|ai_engine.py| C{Claude Sonnet}
     C -->|Script| D(Dialogue Lines)
     D -->|ai_engine.py| E{OpenAI TTS}
     E -->|MP3 Clips| F(Stitched Audio)
@@ -21,26 +22,29 @@ graph TD
     G -->|File ID| H(RSS XML Update)
     H -->|storage_manager.py| I[GitHub Gist]
     I -->|Raw URL| J(Podcast App)
+    K[(SQLite DB)] --- L[main.py]
 ```
-
-## 📁 Directory Structure
-- `main.py`: The central loop that orchestrates the entire process.
-- `rss_handler.py`: Handles article extraction and sanitization.
-- `ai_engine.py`: Manages script generation and audio stitching.
-- `storage_manager.py`: Connects to Google Drive and GitHub Gists.
 
 ## 🚀 Setup
 
-### 1. Requirements
-- Python 3.10+
-- **FFmpeg**: Required for audio processing. (Install via `brew install ffmpeg` on macOS or `apt install ffmpeg` on Linux).
+### Docker (Recommended)
+The easiest way to run the project with all dependencies (including FFmpeg) is via Docker:
+```bash
+docker-compose up --build
+```
 
-### 2. Installation
+### Manual Setup
+
+#### 1. Requirements
+- Python 3.10+
+- **FFmpeg**: Required for audio processing if NOT using Docker.
+
+#### 2. Installation
 ```bash
 git clone https://github.com/yourusername/RSS-podcast-maker.git
 cd RSS-podcast-maker
 python -m venv venv
-source venv/bin/activate  # Windows: venv\\Scripts\\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -53,10 +57,7 @@ GITHUB_TOKEN=your_github_token_with_gist_scope
 ```
 
 ### 4. Configuration
-Copy `config.example.yaml` to `config.yaml` and fill in your details:
-- **Google Drive Folder ID**: Where your MP3s will live.
-- **GitHub Gist ID**: A secret gist to host your feed.
-- **Email**: Recommended to add an `email:` field under `podcast_info` for iTunes compliance.
+Copy `config.example.yaml` to `config.yaml`. The new structure supports a list of `shows`. Each show can have its own feeds, Drive folder, and Gist.
 
 ### 5. Google Drive Authentication
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
@@ -65,20 +66,31 @@ Copy `config.example.yaml` to `config.yaml` and fill in your details:
 4. Download the JSON and save it as `client_secrets.json` in the project root.
 
 ## 🛠️ Usage
-Simply run:
+Run the orchestration loop:
 ```bash
 python main.py
 ```
+Or via Docker:
+```bash
+docker-compose up
+```
+
+### Data Migration
+If you have an old `processed.json` file, migrate it to the new SQLite database:
+```bash
+python migrate_processed.py
+```
 
 ## 🧪 Testing
-The project includes a lean testing suite using `pytest`. To run tests:
+The project includes a testing suite using `pytest`.
 ```bash
 pytest
 ```
-This verifies filename sanitization, script parsing, and RSS generation logic without needing API keys.
+Recent additions include `tests/test_db_manager.py` for verifying SQLite logic.
 
 ## 🤝 Contributing
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ## ⚖️ License
 MIT License. See [LICENSE](LICENSE) for details.
+

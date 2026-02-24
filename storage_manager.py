@@ -67,11 +67,11 @@ def update_gist(token, gist_id, filename, content):
         logging.error(f"Failed to update GitHub Gist: {e}")
         return False
 
-def generate_podcast_rss(drive_service, config):
-    """Generates the RSS feed XML and syncs it to Drive and GitHub Gists."""
+def generate_podcast_rss(drive_service, show_config):
+    """Generates the RSS feed XML and syncs it to Drive and GitHub Gists for a specific show."""
     try:
-        folder_id = config['google_drive']['folder_id']
-        podcast_info = config.get('podcast_info', {})
+        folder_id = show_config['google_drive']['folder_id']
+        podcast_info = show_config.get('podcast_info', {})
         rss_title = podcast_info.get('title', 'My RSS Podcast Feed')
         rss_description = podcast_info.get('description', 'AI-generated summaries.')
         rss_filename = podcast_info.get('rss_filename', 'podcast.xml')
@@ -134,10 +134,10 @@ def generate_podcast_rss(drive_service, config):
         logging.info(f"Successfully updated {rss_filename} on Google Drive")
         
         github_token = os.environ.get("GITHUB_TOKEN")
-        gist_id = config.get('github', {}).get('gist_id')
+        gist_id = show_config.get('github', {}).get('gist_id')
         if github_token and gist_id:
             if update_gist(github_token, gist_id, rss_filename, content):
-                logging.info("Successfully updated GitHub Gist.")
+                logging.info(f"Successfully updated GitHub Gist for {rss_filename}.")
         
         return True
     except Exception as e:
