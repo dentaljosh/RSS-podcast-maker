@@ -1,19 +1,59 @@
 import os
+import time
 import logging
 from pydub import AudioSegment
+
+# Max retries and base delay (seconds) for AI API calls
+_MAX_RETRIES = 3
+_RETRY_BASE_DELAY = 5  # doubles each attempt: 5s, 10s, 20s
+
+
+def _with_retry(fn, label):
+    """
+    Calls fn() with exponential backoff on failure.
+
+    Args:
+        fn: Zero-argument callable to execute.
+        label (str): Description for log messages.
+
+    Returns:
+        The return value of fn() on success.
+
+    Raises:
+        The last exception if all retries are exhausted.
+    """
+    last_exc = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            return fn()
+        except Exception as e:
+            last_exc = e
+            if attempt < _MAX_RETRIES - 1:
+                delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                logging.warning(
+                    f"{label} failed (attempt {attempt + 1}/{_MAX_RETRIES}): {e}. "
+                    f"Retrying in {delay}s..."
+                )
+                time.sleep(delay)
+            else:
+                logging.error(f"{label} failed after {_MAX_RETRIES} attempts: {e}")
+    raise last_exc
+
 
 def generate_script(anthropic_client, model, article_text, target_length_minutes):
     """
     Generates a conversational podcast script using Anthropic's Claude.
-    
+
+    Retries up to 3 times with exponential backoff on transient API errors.
+
     Args:
         anthropic_client: The Anthropic API client.
         model (str): The model ID to use.
         article_text (str): The source text to summarize.
         target_length_minutes (int): Desired podcast length.
-        
+
     Returns:
-        str: The generated script text.
+        str: The generated script text, or None if all retries fail.
     """
     system_prompt = (
         "You are writing a conversational podcast script for two hosts based on the provided article. "
@@ -24,8 +64,8 @@ def generate_script(anthropic_client, model, article_text, target_length_minutes
         "Lines MUST be prefixed strictly with 'HOST_A:' or 'HOST_B:'. Do not include sound effects or other staging instructions. "
         f"The target length for this podcast is approximately {target_length_minutes} minutes, so aim for a proportional word count (around {target_length_minutes * 150} words)."
     )
-    
-    try:
+
+    def _call():
         response = anthropic_client.messages.create(
             model=model,
             max_tokens=4096,
@@ -35,9 +75,12 @@ def generate_script(anthropic_client, model, article_text, target_length_minutes
             ]
         )
         return response.content[0].text
-    except Exception as e:
-        logging.error(f"Failed to generate script: {e}")
+
+    try:
+        return _with_retry(_call, "generate_script")
+    except Exception:
         return None
+
 
 def parse_script(script_text):
     """
@@ -59,9 +102,14 @@ def parse_script(script_text):
             parsed.append(('HOST_B', line[len('**HOST_B:**'):].strip()))
     return parsed
 
+
 def generate_audio_for_lines(openai_client, lines, model, host_a_voice, host_b_voice, temp_dir):
     """
     Generates audio files for each line of dialogue using OpenAI's TTS.
+
+    Each line is retried up to 3 times with exponential backoff. If a line
+    still fails after all retries, the exception is re-raised to abort the
+    entire episode.
     """
     audio_files = []
     for idx, (host, text) in enumerate(lines):
@@ -69,18 +117,21 @@ def generate_audio_for_lines(openai_client, lines, model, host_a_voice, host_b_v
             continue
         voice = host_a_voice if host == 'HOST_A' else host_b_voice
         filename = os.path.join(temp_dir, f"{idx:04d}_{host}.mp3")
-        try:
+
+        def _call(fn=filename, v=voice, t=text):
             response = openai_client.audio.speech.create(
                 model=model,
-                voice=voice,
-                input=text
+                voice=v,
+                input=t
             )
-            response.stream_to_file(filename)
-            audio_files.append(filename)
-        except Exception as e:
-            logging.error(f"Failed to generate audio for line {idx}: {e}")
-            raise e
+            response.stream_to_file(fn)
+
+        # _with_retry raises on exhaustion, aborting the episode
+        _with_retry(_call, f"generate_audio line {idx}")
+        audio_files.append(filename)
+
     return audio_files
+
 
 def stitch_audio(audio_files, output_filename, tags=None):
     """
@@ -91,11 +142,11 @@ def stitch_audio(audio_files, output_filename, tags=None):
         for file in audio_files:
             segment = AudioSegment.from_mp3(file)
             combined += segment
-        
+
         export_kwargs = {"format": "mp3", "bitrate": "64k"}
         if tags:
             export_kwargs["tags"] = tags
-            
+
         combined.export(output_filename, **export_kwargs)
         return True
     except Exception as e:
