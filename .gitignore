@@ -1,0 +1,22 @@
+# Environment variables
+.env
+config.yaml
+
+# Google Drive credentials
+token.json
+client_secrets.json
+
+# State and logs
+processed.json
+pipeline.log
+
+# Audio files
+*.mp3
+
+# Virtual environment
+venv/
+__pycache__/
+*.pyc
+
+# OS files
+.DS_Store

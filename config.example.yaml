@@ -1,0 +1,24 @@
+podcast_info:
+  title: "My AI Podcast"
+  description: "AI-generated audio summaries of RSS feeds."
+  rss_filename: "podcast.xml"
+  email: "podcast@yourdomain.com"
+
+feeds:
+  - url: "https://example.com/rss"
+    name: "Example Feed"
+
+google_drive:
+  folder_id: "your_drive_folder_id_here"
+
+github:
+  gist_id: ""  # Your GitHub Gist ID for RSS hosting
+
+generation:
+  anthropic_model: "claude-3-5-sonnet-20240620"
+  target_length_minutes: 20
+
+audio:
+  openai_tts_model: "tts-1"
+  host_a_voice: "alloy"
+  host_b_voice: "echo"
