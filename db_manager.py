@@ -2,10 +2,23 @@ import sqlite3
 import logging
 from datetime import datetime
 
+__all__ = ["DatabaseManager"]
+
+logger = logging.getLogger(__name__)
+
+
 class DatabaseManager:
-    def __init__(self, db_path='podcast_maker.db'):
+    def __init__(self, db_path: str = "podcast_maker.db") -> None:
         self.db_path = db_path
         self._init_db()
+
+    # --- Context manager support ---
+
+    def __enter__(self) -> "DatabaseManager":
+        return self
+
+    def __exit__(self, *_) -> None:
+        pass  # connections are opened/closed per call; nothing to tear down
 
     def _get_connection(self):
         return sqlite3.connect(self.db_path)
@@ -49,7 +62,7 @@ class DatabaseManager:
                 conn.commit()
                 return True
         except Exception as e:
-            logging.error(f"Failed to mark item as processed: {e}")
+            logger.error(f"Failed to mark item as processed: {e}")
             return False
 
     def get_processed_count(self, show_id=None):

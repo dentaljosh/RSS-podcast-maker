@@ -4,6 +4,10 @@ from typing import Optional
 import httpx
 from bs4 import BeautifulSoup
 
+__all__ = ["fetch_article_text", "safe_filename"]
+
+logger = logging.getLogger(__name__)
+
 _USER_AGENT = "Mozilla/5.0 (compatible; RSSPodcastMaker/1.0)"
 
 
@@ -31,7 +35,7 @@ def fetch_article_text(url: str) -> Optional[str]:
         text = " ".join(text.split())
         return text
     except Exception as e:
-        logging.error(f"Failed to fetch article text from {url}: {e}")
+        logger.error(f"Failed to fetch article text from {url}: {e}")
         return None
 
 

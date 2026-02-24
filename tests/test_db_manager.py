@@ -1,19 +1,15 @@
 import pytest
-import os
 from db_manager import DatabaseManager
 
+
 @pytest.fixture
-def db():
-    test_db = 'test_podcast_maker.db'
-    if os.path.exists(test_db):
-        os.remove(test_db)
-    manager = DatabaseManager(db_path=test_db)
-    yield manager
-    if os.path.exists(test_db):
-        os.remove(test_db)
+def db(tmp_path):
+    """Provides a fresh DatabaseManager backed by a temp file for each test."""
+    return DatabaseManager(db_path=str(tmp_path / "test.db"))
 
 def test_db_init(db):
-    assert os.path.exists(db.db_path)
+    from pathlib import Path
+    assert Path(db.db_path).exists()
 
 def test_mark_processed(db):
     show_id = "test-show"

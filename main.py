@@ -17,8 +17,14 @@ from rss_handler import fetch_article_text, safe_filename
 from storage_manager import generate_podcast_rss, upload_to_drive
 
 
+logger = logging.getLogger(__name__)
+
+
 def setup_logging() -> None:
     """Configures file and console logging. Call only from the entry point."""
+    root = logging.getLogger()
+    if root.handlers:
+        return  # already configured; avoid duplicate handlers
     logging.basicConfig(
         filename="pipeline.log",
         level=logging.INFO,
@@ -26,7 +32,7 @@ def setup_logging() -> None:
     )
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
-    logging.getLogger("").addHandler(console)
+    root.addHandler(console)
 
 
 def load_config() -> dict:
@@ -75,7 +81,7 @@ def process_entry(
     if not item_id or db.is_processed(show_id, item_id):
         return False
 
-    logging.info(f"Processing new item: {entry.title}")
+    logger.info(f"Processing new item: {entry.title}")
     try:
         # 1. Fetch article text
         article_url = entry.get("link", feed_url)
@@ -84,11 +90,11 @@ def process_entry(
             article_text = entry.get("summary", "")
 
         if not article_text or len(article_text.strip()) < 100:
-            logging.warning(f"Skipping {entry.title}: text too short.")
+            logger.warning(f"Skipping {entry.title}: text too short.")
             return False
 
         # 2. Generate script
-        logging.info("Generating script...")
+        logger.info("Generating script...")
         script = generate_script(
             anthropic_client,
             show_gen["anthropic_model"],
@@ -138,7 +144,7 @@ def process_entry(
             }
 
             if not stitch_audio(audio_files, stitched_local_path, tags=mp3_tags):
-                logging.error(f"Audio stitching failed for {entry.title}")
+                logger.error(f"Audio stitching failed for {entry.title}")
                 return False
 
             # 4. Upload & regenerate feed
@@ -146,18 +152,18 @@ def process_entry(
             if not upload_to_drive(
                 drive_service, stitched_local_path, folder_id, final_mp3_name
             ):
-                logging.error(f"Upload failed for {entry.title}")
+                logger.error(f"Upload failed for {entry.title}")
                 return False
 
             generate_podcast_rss(drive_service, show)
 
         # 5. Persist — only reached on full success
         db.mark_processed(show_id, item_id, title=entry.title, feed_name=feed_name)
-        logging.info(f"Finished: {entry.title}")
+        logger.info(f"Finished: {entry.title}")
         return True
 
     except Exception as e:
-        logging.error(f"Error processing {entry.title}: {e}")
+        logger.error(f"Error processing {entry.title}: {e}")
         return False
 
 
@@ -167,7 +173,7 @@ def main() -> None:
     try:
         config = load_config()
     except Exception as e:
-        logging.error(f"Failed to load config.yaml: {e}")
+        logger.error(f"Failed to load config.yaml: {e}")
         return
 
     db = DatabaseManager()
@@ -176,63 +182,63 @@ def main() -> None:
     openai_key = os.environ.get("OPENAI_API_KEY")
 
     if not anthropic_key or not openai_key:
-        logging.warning("API keys not set in environment.")
-
-    # Separate httpx clients to avoid connection-pool and state sharing
-    anthropic_client = Anthropic(
-        api_key=anthropic_key,
-        http_client=httpx.Client(timeout=120.0),
-    )
-    openai_client = OpenAI(
-        api_key=openai_key,
-        http_client=httpx.Client(timeout=120.0),
-    )
-
-    try:
-        from storage_manager import get_drive_service
-        drive_service = get_drive_service()
-    except Exception as e:
-        logging.error(f"Failed to initialize Google Drive client: {e}")
+        logger.error("ANTHROPIC_API_KEY and OPENAI_API_KEY must both be set. Aborting.")
         return
 
-    global_gen = config.get("generation", {})
-    global_audio = config.get("audio", {})
-    global_processing = config.get("processing", {})
-    max_items: int = global_processing.get("max_items_per_feed", 1)
+    # Use explicit httpx clients so we can close them and avoid connection-pool leaks.
+    anthropic_http = httpx.Client(timeout=120.0)
+    openai_http = httpx.Client(timeout=120.0)
+    try:
+        anthropic_client = Anthropic(api_key=anthropic_key, http_client=anthropic_http)
+        openai_client = OpenAI(api_key=openai_key, http_client=openai_http)
 
-    for show in config.get("shows", []):
-        show_name = show.get("name")
-        show_id = show.get("id")
-        logging.info(f"--- Processing show: {show_name} (ID: {show_id}) ---")
+        try:
+            drive_service = get_drive_service()
+        except Exception as e:
+            logger.error(f"Failed to initialize Google Drive client: {e}")
+            return
 
-        show_gen = {**global_gen, **show.get("generation", {})}
-        show_audio = {**global_audio, **show.get("audio", {})}
+        global_gen = config.get("generation", {})
+        global_audio = config.get("audio", {})
+        global_processing = config.get("processing", {})
+        max_items: int = global_processing.get("max_items_per_feed", 1)
 
-        for feed in show.get("feeds", []):
-            url = feed.get("url")
-            feed_name = feed.get("name")
-            logging.info(f"Processing feed: {feed_name}")
+        for show in config.get("shows", []):
+            show_name = show.get("name")
+            show_id = show.get("id")
+            logger.info(f"--- Processing show: {show_name} (ID: {show_id}) ---")
 
-            try:
-                headers = {"User-Agent": "Mozilla/5.0"}
-                response = httpx.get(url, headers=headers, timeout=15)
-                response.raise_for_status()
-                parsed_feed = feedparser.parse(response.content)
-            except Exception as e:
-                logging.error(f"Failed to fetch feed {url}: {e}")
-                continue
+            show_gen = {**global_gen, **show.get("generation", {})}
+            show_audio = {**global_audio, **show.get("audio", {})}
 
-            processed_count = 0
-            for entry in parsed_feed.entries:
-                if processed_count >= max_items:
-                    break
-                if process_entry(
-                    entry, show, feed_name, url,
-                    show_gen, show_audio,
-                    anthropic_client, openai_client,
-                    drive_service, db,
-                ):
-                    processed_count += 1
+            for feed in show.get("feeds", []):
+                url = feed.get("url")
+                feed_name = feed.get("name")
+                logger.info(f"Processing feed: {feed_name}")
+
+                try:
+                    headers = {"User-Agent": "Mozilla/5.0"}
+                    response = httpx.get(url, headers=headers, timeout=15)
+                    response.raise_for_status()
+                    parsed_feed = feedparser.parse(response.content)
+                except Exception as e:
+                    logger.error(f"Failed to fetch feed {url}: {e}")
+                    continue
+
+                processed_count = 0
+                for entry in parsed_feed.entries:
+                    if processed_count >= max_items:
+                        break
+                    if process_entry(
+                        entry, show, feed_name, url,
+                        show_gen, show_audio,
+                        anthropic_client, openai_client,
+                        drive_service, db,
+                    ):
+                        processed_count += 1
+    finally:
+        anthropic_http.close()
+        openai_http.close()
 
 
 if __name__ == "__main__":

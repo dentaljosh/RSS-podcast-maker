@@ -5,7 +5,7 @@ import time
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from email.utils import format_datetime
-from typing import Optional
+from typing import List, Optional
 
 from github import Github, InputFileContent
 from google.auth.transport.requests import Request
@@ -13,6 +13,10 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload
+
+__all__ = ["get_drive_service", "upload_to_drive", "build_rss_xml", "generate_podcast_rss"]
+
+logger = logging.getLogger(__name__)
 
 _ITUNES_NS = "http://www.itunes.com/dtds/podcast-1.0.dtd"
 ET.register_namespace("itunes", _ITUNES_NS)
@@ -83,7 +87,7 @@ def update_gist(token: str, gist_id: str, filename: str, content: str) -> bool:
         )
         return True
     except Exception as e:
-        logging.error(f"Failed to update GitHub Gist: {e}")
+        logger.error(f"Failed to update GitHub Gist: {e}")
         return False
 
 
@@ -92,7 +96,7 @@ def _list_all_drive_files(
     query: str,
     fields: str,
     order_by: str,
-) -> list:
+) -> List[dict]:
     """
     Fetches all matching files from Google Drive, handling nextPageToken pagination.
 
@@ -164,9 +168,12 @@ def build_rss_xml(files: list, show_config: dict) -> str:
         enclosure_url = f"https://docs.google.com/uc?export=download&id={file_id}"
         dt = datetime.strptime(f["createdTime"], "%Y-%m-%dT%H:%M:%S.%fZ")
         pub_date = format_datetime(dt)
+        episode_title = f["name"]
 
         item = ET.SubElement(channel, "item")
-        ET.SubElement(item, "title").text = f["name"]  # ElementTree auto-escapes
+        ET.SubElement(item, "title").text = episode_title  # ElementTree auto-escapes
+        ET.SubElement(item, "description").text = episode_title
+        ET.SubElement(item, _it("summary")).text = episode_title
         ET.SubElement(item, "enclosure", attrib={
             "url": enclosure_url,
             "length": str(f.get("size", 0)),
@@ -202,7 +209,7 @@ def generate_podcast_rss(drive_service, show_config: dict) -> bool:
         podcast_info = show_config.get("podcast_info", {})
         rss_filename = podcast_info.get("rss_filename", "podcast.xml")
 
-        logging.info(f"Generating updated {rss_filename} RSS feed...")
+        logger.info(f"Generating updated {rss_filename} RSS feed...")
 
         # 1. Fetch all MP3 files (with pagination)
         mp3_query = (
@@ -247,17 +254,17 @@ def generate_podcast_rss(drive_service, show_config: dict) -> bool:
                 body={"type": "anyone", "role": "reader"},
             ).execute()
 
-        logging.info(f"Successfully updated {rss_filename} on Google Drive")
+        logger.info(f"Successfully updated {rss_filename} on Google Drive")
 
         # 4. Sync to GitHub Gist
         github_token = os.environ.get("GITHUB_TOKEN")
         gist_id = show_config.get("github", {}).get("gist_id")
         if github_token and gist_id:
             if update_gist(github_token, gist_id, rss_filename, content):
-                logging.info(f"Successfully updated GitHub Gist for {rss_filename}.")
+                logger.info(f"Successfully updated GitHub Gist for {rss_filename}.")
 
         return True
 
     except Exception as e:
-        logging.error(f"Failed to generate podcast RSS: {e}")
+        logger.error(f"Failed to generate podcast RSS: {e}")
         return False
