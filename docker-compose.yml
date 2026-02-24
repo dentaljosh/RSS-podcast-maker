@@ -5,10 +5,6 @@ services:
     build: .
     volumes:
       - .:/app
-      # Ensure the database and tokens persist
-      - ./podcast_maker.db:/app/podcast_maker.db
-      - ./token.json:/app/token.json
-      - ./client_secrets.json:/app/client_secrets.json
     env_file:
       - .env
     restart: unless-stopped

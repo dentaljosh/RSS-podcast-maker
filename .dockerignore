@@ -1,0 +1,28 @@
+# Version control
+.git/
+.gitignore
+
+# Virtual environment
+venv/
+
+# State and logs
+pipeline.log
+*.db
+
+# Secrets (provided via env/volumes)
+.env
+token.json
+client_secrets.json
+
+# Development
+__pycache__/
+.pytest_cache/
+tests/
+*.pyc
+
+# OS files
+.DS_Store
+
+# Old state files
+processed.json
+processed.json.bak

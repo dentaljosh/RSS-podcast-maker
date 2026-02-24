@@ -4,6 +4,7 @@ import time
 import logging
 from datetime import datetime
 from email.utils import format_datetime
+from xml.sax.saxutils import escape
 from github import Github, InputFileContent
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload
@@ -86,15 +87,15 @@ def generate_podcast_rss(drive_service, show_config):
             '<?xml version="1.0" encoding="UTF-8"?>',
             '<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">',
             '  <channel>',
-            f'    <title>{rss_title}</title>',
-            f'    <description>{rss_description}</description>',
+            f'    <title>{escape(rss_title)}</title>',
+            f'    <description>{escape(rss_description)}</description>',
             f'    <link>https://drive.google.com/drive/folders/{folder_id}</link>',
             f'    <language>en-us</language>',
             '    <itunes:author>RSS Podcast Maker</itunes:author>',
-            f'    <itunes:summary>{rss_description}</itunes:summary>',
+            f'    <itunes:summary>{escape(rss_description)}</itunes:summary>',
             '    <itunes:owner>',
             '      <itunes:name>RSS Podcast Maker</itunes:name>',
-            f'      <itunes:email>{podcast_info.get("email", "podcast@yourdomain.com")}</itunes:email>',
+            f'      <itunes:email>{escape(podcast_info.get("email", "podcast@yourdomain.com"))}</itunes:email>',
             '    </itunes:owner>',
             '    <itunes:explicit>no</itunes:explicit>',
             '    <itunes:block>Yes</itunes:block>'
@@ -108,7 +109,7 @@ def generate_podcast_rss(drive_service, show_config):
             
             rss.extend([
                 '    <item>',
-                f'      <title><![CDATA[{f["name"]}]]></title>',
+                f'      <title><![CDATA[{escape(f["name"])}]]></title>',
                 f'      <enclosure url="{enclosure_url}" length="{f.get("size", 0)}" type="audio/mpeg"/>',
                 f'      <guid isPermaLink="false">{file_id}</guid>',
                 f'      <pubDate>{pub_date}</pubDate>',

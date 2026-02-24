@@ -50,8 +50,7 @@ def main():
     if not anthropic_key or not openai_key:
         logging.warning("API keys not set in environment.")
 
-    # Use verify=False to handle macOS SSL issues if needed
-    http_client = httpx.Client(verify=False, timeout=120.0)
+    http_client = httpx.Client(timeout=120.0)
     anthropic_client = Anthropic(api_key=anthropic_key, http_client=http_client)
     openai_client = OpenAI(api_key=openai_key, http_client=http_client)
     
@@ -61,9 +60,11 @@ def main():
         logging.error(f"Failed to initialize Google Drive client: {e}")
         return
     
-    # Global audio/generation settings
+    # Global settings
     global_gen = config.get('generation', {})
     global_audio = config.get('audio', {})
+    global_processing = config.get('processing', {})
+    max_items = global_processing.get('max_items_per_feed', 1)
 
     for show in config.get('shows', []):
         show_id = show.get('id')
@@ -82,7 +83,7 @@ def main():
             try:
                 # Common headers to avoid being blocked
                 headers = {'User-Agent': 'Mozilla/5.0'}
-                response = requests.get(url, headers=headers, timeout=15, verify=False)
+                response = requests.get(url, headers=headers, timeout=15)
                 response.raise_for_status()
                 parsed_feed = feedparser.parse(response.content)
             except Exception as e:
@@ -91,7 +92,7 @@ def main():
                 
             processed_count = 0
             for entry in parsed_feed.entries:
-                if processed_count >= 1: # Safety limit
+                if processed_count >= max_items:
                     break
                     
                 item_id = entry.get('id', entry.get('link'))
@@ -149,22 +150,24 @@ def main():
                         stitched_local_path = os.path.join(temp_dir, "final.mp3")
                         mp3_tags = {"title": safe_title, "artist": "RSS Podcast Maker", "album": safe_feed_name}
                         
-                        if stitch_audio(audio_files, stitched_local_path, tags=mp3_tags):
-                            # 4. Storage & Feed Update
-                            if upload_to_drive(drive_service, stitched_local_path, show['google_drive']['folder_id'], final_mp3_name):
-                                generate_podcast_rss(drive_service, show)
+                        if not stitch_audio(audio_files, stitched_local_path, tags=mp3_tags):
+                            logging.error(f"Audio stitching failed for {entry.title}")
+                            continue
                             
-                    # 5. Finalize
+                        # 4. Storage & Feed Update
+                        if not upload_to_drive(drive_service, stitched_local_path, show['google_drive']['folder_id'], final_mp3_name):
+                            logging.error(f"Upload failed for {entry.title}")
+                            continue
+                            
+                        generate_podcast_rss(drive_service, show)
+                            
+                    # 5. Finalize — only reached if stitch + upload succeeded
                     db.mark_processed(show_id, item_id, title=entry.title, feed_name=feed_name)
                     processed_count += 1
                     logging.info(f"Finished: {entry.title}")
                     
                 except Exception as e:
                     logging.error(f"Error processing {entry.title}: {e}")
-
-if __name__ == "__main__":
-    main()
-
 
 if __name__ == "__main__":
     main()

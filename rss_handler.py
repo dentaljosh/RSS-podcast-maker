@@ -13,8 +13,7 @@ def fetch_article_text(url):
         str: The cleaned text content, or None if the fetch fails.
     """
     try:
-        # Set verify=False to ignore SSL errors common on some Mac Python setups
-        response = requests.get(url, timeout=15, verify=False)
+        response = requests.get(url, timeout=15)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
         
